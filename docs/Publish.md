@@ -11,28 +11,39 @@ To publish your Android application to the Play Store:
        * This also sets the version of your desktop packaged app.
     * `android:versionCode` can be set using the `versionCode` key in `www/manifest.mobile.js`.
        * If omitted, `versionCode` will default to `major * 10000 + minor * 100 + rev` (assuming `version` looks like `"major.minor.rev"`)
+       * Finally, a digit is appended to the versionCode to distinguish the apk type:
+         * 0 - multi architecture
+         * 2 - arm
+         * 4 - x86
+         * 9 - APK using system webview and `minSdkVersion >= 20`
 
 2. Generate a keystore and key pair (as explained [in the Android developer docs](http://developer.android.com/tools/publishing/app-signing.html#signing-manually)).
    ```
-   cca exec keytool -genkey -v -keystore FILENAME.keystore -alias YOUR_PETS_NAME -keyalg RSA -keysize 2048 -validity 10000
+   cca exec keytool -genkey -v -keystore keys.p12 -alias ReleaseKey -keyalg RSA -keysize 2048 -validity 10000 -storetype PKCS12
    ```
   * Create a password when prompted
   * Note: the "cca exec" prefix is required only if keytool is not already available on your PATH
+  * To retrieve your certificate's fingerprint (needed when using `chrome.identity`):
+    * `cca exec keytool -list -v -keystore keys.p12 -storetype PKCS12`
 
 
 3. Put the following settings into a file called `android-release-keys.properties` at the root of your project (as a sibling to `www/`):
 
     ```
-    storeFile=FILENAME.keystore
+    storeFile=keys.p12
     storePassword=YOUR_STORE_PASSWORD
-    keyAlias=YOUR_PETS_NAME
+    keyAlias=ReleaseKey
     keyPassword=YOUR_KEY_PASSWORD
     ```
     * Note: `storePassword` and `keyPassword` are optional. If omitted, you will be prompted for them when building.
+    * Note: You can likewise create an `android-debug-keys.properties`
 
-4. Build your project:
+4. We recommend that you use 3 APKs when publishing:
    ```
-   cca build android --release
+   # Creates ARM and x86 APKs
+   cca build android --release --webview=crosswalk
+   # Creates Cross-platform apk with higher versionCode
+   cca build android --release --webview=system --android-minSdkVersion=21
    ```
 
 5. Find your signed .apk(s) at `platforms/android/out/*-release.apk`.

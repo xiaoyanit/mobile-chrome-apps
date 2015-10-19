@@ -38,36 +38,66 @@
 
 * See which have changes:
 
-    cd chrome-cordova/plugins
+    cd ../mobile-chrome-apps-plugins
     ACTIVE=$(for l in *; do ( cd $l; LAST_VERSION_BUMP=$(git log --grep "Added -dev suffix" -n 1 --pretty=format:%h .); [[ -z $"$LAST_VERSION_BUMP" || -n $(git log -n 1 "$LAST_VERSION_BUMP"..master .) ]] && echo $l); done | xargs echo)
     # See what's changed so you have an idea:
     (for l in $ACTIVE; do (cd $l; echo $l; LAST_VERSION_BUMP=$(git log --grep "Added -dev suffix" -n 1 --pretty=format:%h .); git log --pretty=format:'* %s' --topo-order --no-merges "$LAST_VERSION_BUMP"..master -- . ; echo); done) | less
 
 * Add release notes & bump version:
 
-    for l in $ACTIVE; do ( cd $l; vim README.md plugin.xml ); done
+    for l in $ACTIVE; do ( cd $l; vim README.md plugin.xml package.json ); done
 
 Vim helper command:
     :read !DATE=$(date "+\%h \%d, \%Y"); LAST_VERSION_BUMP=$(git log --grep "Added -dev suffix" -n 1 --pretty=format:\%h .); v="$(grep version= plugin.xml | grep -v xml | head -n1 | cut -d'"' -f2)"; echo "\#\# $v ($DATE)"; git log --pretty=format:'* \%s' --topo-order --no-merges "$LAST_VERSION_BUMP"..master .
 
-    git commit -am "Updated plugin release notes and version numbers for release."
-    git push origin master
+    for l in $ACTIVE; do ( cd $l; git commit -am "Updated release notes and version for release" ); done
+    for l in $ACTIVE; do ( cd $l; git push origin master ); done
+
+* Tag repos
+
+    for l in $ACTIVE; do ( cd $l; v="$(grep version= plugin.xml | grep -v xml | head -n1 | cut -d'"' -f2)"; git tag "$v"; echo "$PWD: Tagged $v"); done
+    for l in $ACTIVE; do ( cd $l; pwd; v="$(grep version= plugin.xml | grep -v xml | head -n1 | cut -d'"' -f2)"; git push origin "refs/tags/$v"); done
 
 * Publish plugins
 
-    for l in $ACTIVE; do ( cd $l; plugman publish . ); done
+    for l in $ACTIVE; do ( cd $l; npm publish ); done
 
 * Set plugin versions to -dev
 
-    for l in *; do ( cd $l; v="$(grep version= plugin.xml | grep -v xml | head -n1 | cut -d'"' -f2)"; v_no_dev="${v%-dev}"; if [ $v = $v_no_dev ]; then v2="$(echo $v|awk -F"." '{$NF+=1}{print $0RT}' OFS="." ORS="")-dev"; echo "$l: Setting version to $v2"; sed -i '' -E s:"version=\"$v\":version=\"$v2\":" plugin.xml; fi) ; done
-    git commit -am "Added -dev suffix to plugin versions"
-    git show # Sanity check
-    git push origin master
+    for l in $ACTIVE; do ( cd $l; v="$(grep version= plugin.xml | grep -v xml | head -n1 | cut -d'"' -f2)"; v_no_dev="${v%-dev}"; if [ $v = $v_no_dev ]; then v2="$(echo $v|awk -F"." '{$NF+=1}{print $0RT}' OFS="." ORS="")-dev"; echo "$l: Setting version to $v2"; sed -i '' -E "s:version=\"$v\":version=\"$v2\":" plugin.xml; sed -i '' -E "s/\"version\": \"$v\"/\"version\": \"$v2\"/" package.json; fi); done
+    for l in $ACTIVE; do ( cd $l; git commit -am "Added -dev suffix to plugin versions" ); done
+    for l in $ACTIVE; do ( cd $l; git show ); done # Sanity check
+    for l in $ACTIVE; do ( cd $l; git push origin master ); done
 
+* Validate that plugins look good
+
+    # TODO: This needs updating now that we're on NPM
+    dev-bin/check-published-plugin.js ../mobile-chrome-apps-plugins/*
 
 ## Publish cca-manifest-logic Module (if changes exist)
 
-TODO
+Bump version
+
+    cd cca-manifest-logic
+    LAST_VERSION_BUMP=$(git log --grep "Set.*-dev" -n 1 --pretty=format:%h .); git log --pretty=format:'* %s' --topo-order --no-merges "$LAST_VERSION_BUMP"..master -- .
+    vim README.md package.json ../package.json
+    git add README.md package.json ../package.json
+    git commit -m "Releasing cca-manifest-logic@$(grep '"version"' package.json | cut -d'"' -f4)"
+    npm publish .
+
+Increment & add -dev suffix
+
+    vim package.json
+    git add package.json && git commit -m "Set version of cca-manifest-logic to $(grep '"version"' package.json | cut -d'"' -f4)"
+    git push origin master
+
+Update version in chrome-app-developer-tool's package.json
+
+    cd ../chrome-app-developer-tool
+    npm install --save-dev cca-manifest-logic
+    git add package.json && git commit -m "Updated cca-manifest-logic to v$(npm ls --depth=0 --parseable --long | grep cca-manifest-logic | cut -d: -f2 | cut -d@ -f2)"
+    git push origin master
+
 
 ## Update npm Dependencies
 
@@ -99,12 +129,6 @@ Next, add in notable RELEASENOTE.md entries from `cordova-plugman` and `cordova-
 
     # Update shrinkwrap dependancies
     npm shrinkwrap
-    # If you get errors about invalid semver of a browserify dependency:
-        vim node_modules/cordova-lib/node_modules/cordova-js/package.json # Delete browserify dependency
-        rm -r node_modules/cordova-lib/node_modules/cordova-js/node_modules/browserify
-        npm shrinkwrap
-    # If you didn't get such an error, remove these instructions!
-
     git add npm-shrinkwrap.json
 
     # Commit so that no-one re-uses this version of the rc
@@ -112,7 +136,7 @@ Next, add in notable RELEASENOTE.md entries from `cordova-plugman` and `cordova-
 
     # Publish rc to npm
     dev-bin/prepfornpm.sh
-    npm publish --tag=rc # This takes a long time.
+    npm publish --tag=rc # If this fails, try again with node v0.12
     dev-bin/prepfornpm.sh # It's a toggle... yeah, i know...
 
     # Double check things are still good
@@ -151,6 +175,7 @@ The following is the full set of tests. Vary accordingly depending on the magnit
 
     # Things are good?
     git status
+    ls npm-shrinkwrap.json # Still exists from rc, right?
 
     # remove -rc# from "version"
     vim package.json
@@ -167,7 +192,7 @@ The following is the full set of tests. Vary accordingly depending on the magnit
     npm info cca
 
     # Unpublish rc
-    npm tag cca@0.0.0 rc
+    npm dist-tag cca@0.0.0 rc
     npm unpublish cca@$CCA_VERSION-rc#
 
     # Remove shrinkwrap file, and push changed to master

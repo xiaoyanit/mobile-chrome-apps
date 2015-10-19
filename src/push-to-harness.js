@@ -11,7 +11,16 @@ module.exports = exports = function push(target, watch) {
   return checkFileHandleLimit()
   .then(function(fileHandleLimit) {
     if (fileHandleLimit < 10000 && watch) {
-      return relaunchWithBiggerUlimit(argsAsJson);
+      return relaunchWithBiggerUlimit(argsAsJson)
+      .then(function() {
+        return true;
+      }, function() {
+        // Setting ulimit can fail, so just continue on if it does.
+      });
+    }
+  }).then(function(done) {
+    if (done) {
+      return;
     }
     target = !target || Array.isArray(target) ? target : [target];
     var ret = Q.when(target);
@@ -34,7 +43,18 @@ module.exports = exports = function push(target, watch) {
 
 function extractTargets() {
   // TODO: Use adbkit for smarter auto-detection.
-  return Q.when(['localhost:2424']);
+  var PushClient = require('chrome-app-developer-tool-client');
+  return PushClient.detectAdbTargets()
+  .then(function(targets) {
+      if (!targets.length) {
+          console.warn('No connected android devices detected. Defaulting to localhost.');
+          targets = ['localhost:2424'];
+      }
+      return targets;
+  }, function() {
+      console.warn('Could not use adb to detect connected devices');
+      return ['localhost:2424'];
+  });
 }
 
 function createSession(targets) {
@@ -186,8 +206,8 @@ function checkFileHandleLimit() {
 function relaunchWithBiggerUlimit(argsAsJson) {
   // re-run with the new ulimit
   var deferred = Q.defer();
-  var args = ['-c', 'ulimit -n 10240; exec "' + process.argv[0] + '" "' + __filename + '" "' + argsAsJson.replace(/"/g, '@') + '"'];
-  var child = child_process.spawn(process.env['SHELL'], args, { stdio: 'inherit' });
+  var args = ['-c', 'ulimit -n 10240 && exec "' + process.argv[0] + '" "' + __filename + '" "' + argsAsJson.replace(/"/g, '@') + '"'];
+  var child = child_process.spawn('sh', args, { stdio: 'inherit' });
   child.on('close', function(code) {
     if (code) {
       deferred.reject(code);

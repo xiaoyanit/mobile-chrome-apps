@@ -4,6 +4,82 @@ For detailed release notes for plugins, refer to each plugin's `README.md`.
 
 For Android / iOS detailed release notes, refer to `RELEASENOTES.md` with `cordova/cordova-android` and `cordova/cordova-ios`
 
+### v0.7.4 (Aug 6, 2015)
+* Add blob: to default CSP (fixes #589)
+
+### v0.7.3 (Jul 27, 2015)
+* Fixed 0.7.2 release being broken
+
+### v0.7.2 (Jul 27, 2015)
+* Switch from chrome-extension: to gopher: to fix apps being broken on latest Andrew WebView (http://crbug.com/513352)
+
+### v0.7.1 (June 26, 2015)
+* Pin cordova-plugin-whitelist to v1.0.0 to avoid iOS breakage
+* Fix cca push on OS X when shell is not bash
+
+### v0.7.0 (May 05, 2015)
+* Big! Rewrite of `cordova-plugin-background-app` so that `android:theme=translucent` is no longer needed (#322)
+* Add support for `chrome.usb`
+* All plugins are now hosted on npm
+* Update crosswalk plugin to 1.2.0 (Crosswalk 13)
+* Allow setting "webview": "crosswalk@version"
+* Update notifier and crypto-js module deps
+* Update to official cordova-android to 4.0.0 release!
+* Android: CB-8834 Don't fail to install on VERSION_DOWNGRADE
+* Android: CB-8829 Set targetSdk to 22
+
+### v0.6.0 (Mar 17, 2015)
+* Updated cordova-android to use latest 4.0.0-dev version
+* Updated cordova-ios to 3.8.0 (Fixes `exec()` bridge `<iframe>` explosion bug)
+* Updated Crosswalk to version 11
+* Android now sets target-sdk=21 (Lollipop)
+* Content-Security-Policy now works and enabled by default (can be disabled though)
+* `cca` is now smarter about not adding iOS when building for Android (and vice-versa)
+* Pin major version of bootstrap, i18n, and navigation plugins (`cca` will no longer break when plugins are updated)
+* Generate `<icon>` within `config.xml` rather than copy files directly (Fixes iPhone 6+ issues)
+* Android builds now work the same when built via Android Studio vs. command-line
+* No longer rename `_locales` -> `CCA_locales`
+* Ignore `<!-- html -->` when parsing main page (fixes #510)
+* Add `cca build --android-minSdkVersion` flag
+* Add `cca run --list` to list available deploy targets
+* Add `cca run --link` to link rather than copy native source files (useful when developing plugins)
+* `cca push` now works on node 0.12
+* Don't build multi-arch apks when `--webview=system` is used.
+* Added "new version of cca available" logic via `update-notifier` module
+* New publishing instructions on how to use Crosswalk for pre-L Android, and system webview for L+
+
+### 0.5.1 (Dec 16, 2014)
+* Fix #412 #448 Warn when adding plugins explicitly when you need a manifest permission
+* Fix #455 Support setting androidTheme in manifest.mobile
+* Fix HTMLImports not working with imports polyfill (#450)
+* Android: Look for Android SDK in Android Studio 1.0's default location
+* Android: CB-7881 Android tooling shouldn't lock application directory
+* Android: CB-3679 Move splashscreen logic into splashscreen plugin
+* Android: CB-8143 Use the correct Android Gradle plugin for the installed Gradle version
+* Android: Revert Gradle distributionUrlRegex cleanup.
+* Android: CB-8119 Restart adb when we detect it's hung
+* Android: CB-8112 Turn off mediaPlaybackRequiresUserGesture
+* Android: CB-6153 Add a preference for controlling hardware button audio stream (DefaultVolumeStream)
+* Android: CB-8081 Allow gradle builds to use Java 6 instead of requiring 7
+* Android: CB-8031 Fix race condition that shows as ConcurrentModificationException
+
+### v0.5.0 (Nov 18, 2014)
+* Bumping cordova-ios version to 3.7.0
+* Update cordova-android and cordova-crosswalk-engine submodules
+* Allow versions with 4 dot separated numbers
+* Allow setting min/target SDK version via manifest
+* Don't build arch-specific APKs when webview == system
+* `cca push` now auto-detects connected Android devices (no need to `adb forward`)
+* Only remove cca plugins during `cca upgrade`
+* Stop disabling inline &lt;script&gt; (fixes #384)
+* Teach cca that org.chromium.system.network is a dep of socket (fixes #381)
+* Allow platform-specific packageId and version (fixes #432)
+* Fix for cca run not auto-upgrading
+* `cca run chrome` now works on Windows and in non-cca Chrome Apps
+* Added `cca run canary` command
+* Remove labs.keyboard plugin (no longer required)
+* Refactor pre/post-prepare hooks as in-process events based hooks
+* Disable pre/post prepare hooks during upgrade
 
 ### v0.4.3 (Oct 24, 2014)
 * Teach cca that org.chromium.system.network is a dep of socket (fixes #381)

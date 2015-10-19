@@ -16,7 +16,6 @@ function resolveTilde(string) {
 module.exports = exports = function createApp(destAppDir, ccaRoot, origDir, packageId, appName, flags) {
   var srcAppDir = null;
   var manifest = null;
-  var isGitRepo = fs.existsSync(path.join(__dirname, '..', '.git')); // git vs npm
   var appWasImported = false;
   var manifestDesktopFilename = path.join(destAppDir, 'www', 'manifest.json');
   var manifestMobileFilename = path.join(destAppDir, 'www', 'manifest.mobile.json');
@@ -33,17 +32,7 @@ module.exports = exports = function createApp(destAppDir, ccaRoot, origDir, pack
         sourceArg = path.dirname(sourceArg);
       }
       // Always check the sourceArg as a relative path first, even if its a special value (like 'spec')
-      // TODO: shouldn't we support import from cca/cordova style apps with www/?
       var dirsToTry = [ path.resolve(origDir, resolveTilde(sourceArg)) ];
-
-      // Special values for sourceArg we resolve to predefined locations
-      if (sourceArg === 'spec') {
-        dirsToTry.push(path.join(ccaRoot, 'chrome-cordova', 'chrome-apps-api-tests'));
-      } else if (sourceArg === 'oldspec') {
-        dirsToTry.push(path.join(ccaRoot, 'chrome-cordova', 'spec', 'www'));
-      } else if (sourceArg === 'default') {
-        dirsToTry.push(path.join(ccaRoot, 'templates', 'default-app'));
-      }
 
       // Find the first valid path in our list (valid paths contain a manifest.json file)
       var foundManifest = false;
@@ -113,19 +102,10 @@ module.exports = exports = function createApp(destAppDir, ccaRoot, origDir, pack
   .then(function() {
     // Update default packageId if needed.
     return Q.ninvoke(fs, 'readFile', manifestMobileFilename, { encoding: 'utf-8' }).then(function(manifestMobileData) {
-      var manifestMobile;
-      try {
-        // jshint evil:true
-        manifestMobile = eval('(' + manifestMobileData + ')');
-        // jshint evil:false
-      } catch (e) {
-        console.error(e);
-        return Q.reject('Unable to parse manifest ' + manifestMobileFilename);
-      }
-      if (manifestMobile.packageId === 'com.your.company.HelloWorld') {
-        manifestMobile.packageId = packageId || ('com.your.company.' + (appName || manifest['name'].replace(/[^a-zA-Z0-9_]/g, '')));
-        Q.ninvoke(fs, 'writeFile', manifestMobileFilename, JSON.stringify(manifestMobile, null, 4));
-      }
+      var newPackageId = packageId || ('com.your.company.' + (appName || manifest['name'].replace(/[^a-zA-Z0-9_]/g, '')));
+      // Replace rather than parse so as to maintain comments
+      manifestMobileData = manifestMobileData.replace('com.your.company.HelloWorld', newPackageId);
+      return Q.ninvoke(fs, 'writeFile', manifestMobileFilename, manifestMobileData);
     });
   })
   .then(function() {
@@ -167,15 +147,6 @@ module.exports = exports = function createApp(destAppDir, ccaRoot, origDir, pack
     }
     writeHook(path.join('hooks', 'before_prepare', 'cca-check.js'));
     writeHook(path.join('hooks', 'before_platform_add', 'cca-check.js'));
-
-    // Create a convenience link to cca
-    if (isGitRepo || !shelljs.which('cca')) {
-      var ccaPath = path.relative('.', path.join(ccaRoot, 'src', 'cca.js'));
-      var comment = 'Feel free to rewrite this file to point at "cca" in a way that works for you.';
-      fs.writeFileSync('cca.cmd', 'REM ' + comment + '\r\nnode "' + ccaPath.replace(/\//g, '\\') + '" %*\r\n');
-      fs.writeFileSync('cca', '#!/bin/sh\n# ' + comment + '\nexec "$(dirname $0)/' + ccaPath.replace(/\\/g, '/') + '" "$@"\n');
-      fs.chmodSync('cca', '777');
-    }
   })
   .then(function() {
     // Create a convenience gitignore

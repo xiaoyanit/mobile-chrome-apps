@@ -28,9 +28,7 @@ var __ = require('underscore');
 var utils = require('./utils');
 var ccaManifestLogic = require('cca-manifest-logic');
 var cordova = require('cordova');
-// TODO: This is ugly make it better once cordova-cli with proper exports is out.
-var cordovaLib;
-try { cordovaLib = require('cordova/node_modules/cordova-lib'); } catch(e) { cordovaLib = require('cordova-lib'); }
+var cordovaLib = cordova.cordova_lib;
 
 // Returns a promise.
 module.exports = exports = function prePrepareCommand(context) {
@@ -45,20 +43,23 @@ module.exports = exports = function prePrepareCommand(context) {
   var argv = require('optimist')
       .options('webview', { type: 'string' })
       .options('release', { type: 'boolean' })
+      .options('link', { type: 'boolean' })
+      .options('verbose', { type: 'boolean', alias: 'd' })
       .argv;
 
   // Pre-prepare manifest check and project munger
   return require('./get-manifest')('www')
   .then(function(m) {
     manifest = m;
-    return ccaManifestLogic.analyseManifest(manifest, { webview: argv.webview });
+    if (argv.webview) {
+        manifest.webview = argv.webview;
+    }
+
+    return ccaManifestLogic.analyseManifest(manifest);
   })
   .then(function(manifestData) {
-    pluginsToBeInstalled = manifestData.pluginsToBeInstalled.concat();
+    pluginsToBeInstalled = manifestData.pluginsToBeInstalled.concat(['org.chromium.cca-hooks']);
     pluginsToBeNotInstalled = manifestData.pluginsToBeNotInstalled.concat();
-    pluginsToBeNotInstalled = pluginsToBeNotInstalled.filter(function(plugin) {
-      return pluginsToBeInstalled.indexOf(plugin) == -1;
-    });
     pluginsNotRecognized = manifestData.pluginsNotRecognized;
     whitelist = manifestData.whitelist;
 
@@ -74,7 +75,7 @@ module.exports = exports = function prePrepareCommand(context) {
   })
   .then(function() {
     if ( (context.cordova.platforms.indexOf('android') != -1) && argv['release']) {
-      if (!process.env.RELEASE_SIGNING_PROPERTIES_FILE) {
+      if (!fs.existsSync('android-release-keys.properties')) {
         utils.fatal('Cannot build android in release mode: android-release-keys.properties not found in project root.');
       }
     }
@@ -118,16 +119,35 @@ module.exports = exports = function prePrepareCommand(context) {
     var missingPlugins = __.difference(pluginsToBeInstalled, installedPlugins);
     var excessPlugins = __.intersection(installedPlugins, pluginsToBeNotInstalled);
 
+    function pinVersion(pluginId, version) {
+      var idx = missingPlugins.indexOf(pluginId);
+      if (idx != -1) {
+        missingPlugins[idx] += '@' + version;
+      }
+    }
+
     if (missingPlugins.length || excessPlugins.length || pluginsNotRecognized.length) {
       console.log('## Updating plugins based on manifest.json');
       pluginsNotRecognized.forEach(function(unknownPermission) {
         console.warn('Permission not recognized by cca: ' + unknownPermission + ' (ignoring)');
       });
-      var cmds = missingPlugins.map(function(plugin) {
-        return ['plugin', 'add', plugin];
-      }).concat(excessPlugins.map(function(plugin) {
-        return ['plugin', 'rm', plugin];
-      }));
+      var opts = {
+        link: argv.link,
+        verbose: argv.verbose
+      };
+      var cmds = [];
+      if (missingPlugins.length) {
+        // Pin major versions of plugins that we care about
+        pinVersion('cordova-plugin-chrome-apps-navigation', '1');
+        pinVersion('cordova-plugin-chrome-apps-i18n', '2');
+        pinVersion('cordova-plugin-chrome-apps-bootstrap', '3');
+        pinVersion('cordova-plugin-crosswalk-webview', '1');
+
+        cmds.push(['plugin', 'add', missingPlugins, opts]);
+      }
+      if (excessPlugins.length) {
+        cmds.push(['plugin', 'rm', excessPlugins, opts]);
+      }
       return require('./cordova-commands').runAllCmds(cmds);
     }
   })
@@ -135,7 +155,7 @@ module.exports = exports = function prePrepareCommand(context) {
     // After adding/removing plugins above, the list of installed plugins is:
     installedPlugins = __.difference(__.union(installedPlugins, pluginsToBeInstalled), pluginsToBeNotInstalled);
     // If chrome.identity is installed, we need a client id.
-    if (installedPlugins.indexOf('org.chromium.identity') >= 0) {
+    if (installedPlugins.indexOf('cordova-plugin-chrome-apps-identity') >= 0) {
       if (!manifest.oauth2 || !manifest.oauth2.client_id) {
         console.warn('Warning: chrome.identity requires a client ID to be specified in the manifest.');
       }

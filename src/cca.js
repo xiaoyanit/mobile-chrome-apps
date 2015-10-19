@@ -24,6 +24,7 @@ var path = require('path');
 
 // Third-party modules.
 var Q = require('q');
+var updateNotifier = require('update-notifier');
 
 // Local modules.
 var utils = require('./utils');
@@ -32,37 +33,20 @@ var utils = require('./utils');
 var origDir = process.cwd();
 var ccaRoot = path.join(__dirname, '..');
 
-// TODO: This is ugly make it better once cordova-cli with proper exports is out.
-var cordovaLib;
-try { cordovaLib = require('cordova/node_modules/cordova-lib'); } catch(e) { cordovaLib = require('cordova-lib'); }
-
-/******************************************************************************/
-
-function fixEnv() {
-  // Add flags for building with Gradle
-  if (typeof process.env.ANDROID_BUILD == 'undefined') {
-    process.env.ANDROID_BUILD = 'gradle';
-  }
-  if (typeof process.env.BUILD_MULTIPLE_APKS == 'undefined') {
-    process.env.BUILD_MULTIPLE_APKS = '1';
-  }
-  if (process.env.BUILD_MULTIPLE_APKS && typeof process.env.DEPLOY_APK_ARCH == 'undefined') {
-    process.env.DEPLOY_APK_ARCH = 'armv7';
-  }
-}
-/******************************************************************************/
-function setupHooks() {
-  var prePrepareHook = require('./pre-prepare');
-  var postPrepareHook = require('./post-prepare');
-  cordovaLib.events.on('before_prepare', prePrepareHook);
-  cordovaLib.events.on('after_prepare', postPrepareHook);
-}
-
-/******************************************************************************/
+var cordova = require('cordova');
+var cordovaLib = cordova.cordova_lib;
+var hooks = require('./hooks');
 
 function main() {
   var commandLineFlags = require('./parse-command-line')();
   utils.exit.pause_on_exit = commandLineFlags.pause_on_exit;
+
+  // TODO: Should we support an opt out `--no-update-notifier`?
+  var pkg = require('../package.json');
+  updateNotifier({
+    pkg: pkg,
+    updateCheckInterval: 1000 * 60 * 60 * 24, // Daily
+  }).notify();
 
   var command = commandLineFlags._[0];
   var packageVersion = require('../package').version;
@@ -70,10 +54,7 @@ function main() {
   // Colorize after parseCommandLine to avoid --help being printed in red.
   utils.colorizeConsole();
 
-  // TODO: Add env detection to Cordova.
-  fixEnv();
-
-  setupHooks();
+  hooks.registerHooks();
 
   function printCcaVersionPrefix() {
     console.log('cca v' + packageVersion);
@@ -93,14 +74,40 @@ function main() {
     command = 'help';
   }
 
+  function autoAddPlatforms() {
+    var plats = [];
+    if (process.argv.indexOf('android') != -1 && !fs.existsSync(path.join('platforms', 'android'))) {
+      plats.push('android');
+    }
+    if (process.argv.indexOf('ios') != -1 && !fs.existsSync(path.join('platforms', 'ios'))) {
+      plats.push('ios');
+    }
+    if (plats.length === 0) {
+      return Q();
+    }
+    var argv = require('optimist')
+        .options('link', { type: 'boolean' })
+        .options('verbose', { type: 'boolean', alias: 'd' })
+        .argv;
+    var opts = {
+      link: argv.link,
+      verbose: argv.verbose
+    };
+    return require('./cordova-commands').runCmd(['platform', 'add', plats, opts])
+    .then(require('./write-out-cca-version'));
+  }
+
   function beforeCordovaPrepare() {
-    if (commandLineFlags['skip-upgrade']) {
-      return Q.when();
-    }
-    if (!fs.existsSync(path.join('www', 'manifest.json'))) {
-      return Q.reject('This is not a cca project (no www/manifest.json file). Perhaps you meant to use the cordova-cli?');
-    }
-    return require('./upgrade-project').upgradeProjectIfStale();
+    return autoAddPlatforms()
+    .then(function() {
+      if (commandLineFlags['skip-upgrade']) {
+        return;
+      }
+      if (!fs.existsSync(path.join('www', 'manifest.json'))) {
+        return Q.reject('This is not a cca project (no www/manifest.json file). Perhaps you meant to use the cordova-cli?');
+      }
+      return require('./upgrade-project').upgradeProjectIfStale(commandLineFlags.y);
+    });
   }
 
   function forwardCurrentCommandToCordova() {
@@ -113,7 +120,7 @@ function main() {
     cordovaLib.events.removeListener('verbose', console.log);
 
     // TODO: Can we replace use of CLI here?  Calls to cordova-lib cordova.raw?
-    return require('cordova/src/cli')(process.argv);
+    return cordova.cli(process.argv);
   }
 
   function printVersionThenPrePrePrepareThenForwardCommandToCordova() {
@@ -150,17 +157,13 @@ function main() {
     },
     'run': function() {
       printCcaVersionPrefix();
-      return beforeCordovaPrepare()
-      .then(function() {
-        var platform = commandLineFlags._[1];
-        if (platform === 'chrome') {
-          // TODO: For some reason --user-data-dir and --load-and-launch-app do not play well together.  Seems you must still quit Chrome Canary first for this to work.
-          var spawn = require('child_process').spawn;
-          spawn('open', ['-n', '-a', 'Google Chrome Canary', '--args', '--user-data-dir=/tmp/cca_chrome_data_dir', '--load-and-launch-app=' + path.resolve('www')]); // '--disable-web-security'
-          return;
-        }
-        return forwardCurrentCommandToCordova();
-      });
+      var platform = commandLineFlags._[1];
+      if (platform === 'chrome' || platform === 'canary') {
+        return require('./run-in-chrome')(platform);
+      } else {
+        return beforeCordovaPrepare()
+          .then(forwardCurrentCommandToCordova);
+      }
     },
     'create': function() {
       printCcaVersionPrefix();
@@ -179,7 +182,7 @@ function main() {
     },
     'upgrade': function() {
       printCcaVersionPrefix();
-      return require('./upgrade-project').upgradeProject(commandLineFlags.y);
+      return require('./upgrade-project').upgradeProject(true); // true means never prompt for upgrade
     },
     'version': function() {
       console.log(packageVersion);
@@ -190,15 +193,17 @@ function main() {
       require('optimist').showHelp(console.log);
       return Q.when();
     },
+    'plugin': printVersionThenPrePrePrepareThenForwardCommandToCordova,
+    'plugins': function() {
+      return commandActions.plugin.apply(this, arguments);
+    },
     'platform': function() {
       printCcaVersionPrefix();
       // Do not run auto-upgrade step if doing a platforms command
       return forwardCurrentCommandToCordova();
     },
     'platforms': function() {
-      printCcaVersionPrefix();
-      // Do not run auto-upgrade step if doing a platforms command
-      return forwardCurrentCommandToCordova();
+      return commandActions.platform.apply(this, arguments);
     },
     'analytics': function() {
       // Do nothing.  This is handled as a special-case below.
@@ -207,8 +212,6 @@ function main() {
     'build': printVersionThenPrePrePrepareThenForwardCommandToCordova,
     'compile': printVersionThenPrePrePrepareThenForwardCommandToCordova,
     'emulate': printVersionThenPrePrePrepareThenForwardCommandToCordova,
-    'plugin': printVersionThenPrePrePrepareThenForwardCommandToCordova,
-    'plugins': printVersionThenPrePrePrepareThenForwardCommandToCordova,
     'prepare': printVersionThenPrePrePrepareThenForwardCommandToCordova,
     'serve': printVersionThenPrePrePrepareThenForwardCommandToCordova,
   };
@@ -220,13 +223,6 @@ function main() {
   if (projectRoot) {
     cordovaLib.cordova.config(projectRoot, require('./default-config')(ccaRoot));
     process.chdir(projectRoot);
-    // signing keys
-    if (!process.env.DEBUG_SIGNING_PROPERTIES_FILE && fs.existsSync('android-debug-keys.properties')) {
-      process.env.DEBUG_SIGNING_PROPERTIES_FILE = path.resolve('android-debug-keys.properties');
-    }
-    if (!process.env.RELEASE_SIGNING_PROPERTIES_FILE && fs.existsSync('android-release-keys.properties')) {
-      process.env.RELEASE_SIGNING_PROPERTIES_FILE = path.resolve('android-release-keys.properties');
-    }
   }
 
   if (!commandActions.hasOwnProperty(command)) {
@@ -247,6 +243,10 @@ function main() {
   var analyticsLoader = require('./analytics-loader');
   if (command === 'analytics') {
     analyticsLoader.analyticsCommand(commandLineFlags._[1]);
+  }
+
+  if (commandLineFlags['android-minSdkVersion']) {
+    process.env['ORG_GRADLE_PROJECT_cdvMinSdkVersion'] = commandLineFlags['android-minSdkVersion'];
   }
 
   analyticsLoader.getAnalyticsModule()

@@ -5,11 +5,10 @@ module.exports = exports = function defaultConfig(ccaRoot) {
 
   var plugin_search_path = [
     path.join(ccaRoot, 'cordova'),
-    path.join(ccaRoot, 'cordova', 'cordova-plugins'),
   ];
 
   // For plugin development with local cca git checkout.
-  var chrome_cordova_plugins = path.join(ccaRoot, 'chrome-cordova', 'plugins');
+  var chrome_cordova_plugins = path.join(ccaRoot, '..', 'mobile-chrome-apps-plugins');
   if (fs.existsSync(chrome_cordova_plugins)) {
     plugin_search_path.push(chrome_cordova_plugins);
   }

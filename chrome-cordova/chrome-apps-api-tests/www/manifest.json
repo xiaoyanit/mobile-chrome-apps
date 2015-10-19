@@ -1,0 +1,94 @@
+{
+  "name": "Chrome Apps Api Tests",
+  "description": "Auto and Manual testing of chrome APIs, for desktop and mobile",
+  "manifest_version": 2,
+  "minimum_chrome_version": "23",
+  "version": "0.2.0",
+  "offline_enabled": true,
+  "icons": {
+    "16": "assets/icon-128x128.png",
+    "128": "assets/icon-128x128.png"
+  },
+  "app": {
+    "background": {
+      "scripts": [
+        "background.js"
+      ]
+    }
+  },
+  "bluetooth": {
+    "socket": true,
+    "low_energy": true,
+    "uuids": [
+      "C9D3", // UUID for the ble-test app
+      "180D", // UUID for heart rate simulator
+      "00001101-0000-1000-8000-00805f9b34fb", // UUID for the Jade robot
+
+      "F0000000-0451-4000-B000-000000000000", // TI SensorTag base
+
+      "f000aa00-0451-4000-b000-000000000000", // TI SensorTag sensors
+      "f000aa10-0451-4000-b000-000000000000",
+      "f000aa20-0451-4000-b000-000000000000",
+      "f000aa30-0451-4000-b000-000000000000",
+      "f000aa40-0451-4000-b000-000000000000",
+      "f000aa50-0451-4000-b000-000000000000",
+      "f000aa60-0451-4000-b000-000000000000"
+    ]
+  },
+  "sockets": {
+    "udp": {
+      "bind": "*",
+      "send": "*",
+      "multicastMembership": ""
+    },
+    "tcp": {
+      "connect": "*"
+    },
+    "tcpServer": {
+      "listen": "*"
+    }
+  },
+  "permissions": [
+    "alarms",
+    "audioCapture",
+    "fileSystem",
+    "geolocation",
+    "identity",
+    "idle",
+    "notifications",
+    "power",
+    "pushMessaging",
+    "gcm",
+    {
+      "socket": [ "tcp-connect", "tcp-listen", "udp-send-to", "udp-bind", "udp-multicast-membership" ]
+    },
+    "storage",
+    "system.cpu",
+    "system.display",
+    "system.memory",
+    "system.network",
+    "system.storage",
+    "usb",
+    {
+      "usbDevices": [{ "vendorId": 6353, "productId": 8193 }]
+    },
+    "videoCapture",
+    "http://www.apache.org/*",
+    "http://127.0.0.1/*",
+    "https://www.googleapis.com/*"
+  ],
+  "default_locale": "fr",
+
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAh6XIwsoka6hUjQ+YvR+4URrYVjsSAVuPCmqIi1LQhBWiwInV2nviFVS5mbok4GMr3GXQNSaCN2u9e1lQXgz9/+6strxVfwHfPM1oRn0lJmwYozqGYBrRLkFrdIV3+/ECW3fMYDVJXOohsbs/m+DEkKaEXZXM1AkSKRsgtTKls9qBjOK8lZF7rKPN8Rx0ikqUS8i42Llxc3OfgXWi99WH/VByrxZbc/EvR/HKM9MzzGvAy1510vVB2MbveX5YAxgvTIJUAC8ZUv5RnfYK4GWGQoF+n83o6YIIONfC3pnM0gRfLIaz4+gZaY3KuYocpNHp6b/bRhr49kT/oER8TkOW7QIDAQAB",
+
+  "oauth2": {
+    "client_id": "420833503950-i1soq7l5m5kilfcooanqbsukg08jcrkp.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive",
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/youtube.readonly",
+      "https://www.googleapis.com/auth/gcm_for_chrome",
+      "https://www.googleapis.com/auth/gcm_for_chrome.readonly"
+    ]
+  }
+}
